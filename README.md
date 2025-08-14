@@ -39,8 +39,6 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 
 ## Example Videos
 
-> Put your video files into the repository at `videos/`. GitHub can inline small MP4/WebM files (≤100 MB). For larger files, use Git LFS or link to YouTube/Vimeo. Each entry below includes an inline player and a fallback link.
-
 **1) Introduction / overview**  
 <video src="videos/intro.mp4" controls width="720"></video>  
 *[Download / open video](videos/intro.mp4)*
@@ -179,35 +177,6 @@ CHANNEL_CONFIG = [
 CHANNEL_OFFSET = 0  # horizontal pixel shift applied to all channels (for alignment)
 ```
 
-**(Optional) Full configuration snippet, in the same style as in the script:**  
-```python
-# ======================================================================
-ROOT_DIR = "/Users/yourname/AVCV_example_set_up/"
-
-BASE_FILES = [
-    {"name": "CME", "file": "CME_tracks.csv"},
-    {"name": "Dino", "file": "Dino_tracks.csv"}
-]
-
-SEC_FILES = [
-    {"name": "Dino", "file": "Dino_tracks.csv"},
-    {"name": "CME", "file": "CME_tracks.csv"}
-]
-
-DETECTION_CONFIG = [
-    {"name": "CME", "file": "detections_CME.csv", "color": "blue"},
-    {"name": "Dino", "file": "detections_Dino.csv", "color": "red"}
-]
-
-CHANNEL_CONFIG = [
-    {"name": "Channel 1", "path": "Channel_1_Folder", "color": "green"},
-    {"name": "Channel 2", "path": "Channel_2_Folder", "color": "red"}
-]
-
-CHANNEL_OFFSET = 0
-# ======================================================================
-```
-
 ---
 
 ## 4) CSV Formats
@@ -228,7 +197,7 @@ Expected columns (headers required):
 ### Detection CSVs
 A simple list of detection points per frame. Typical columns:
 ```
-ID, t, x, y, z, FI
+t, x, y, z
 ```
 (Minimum fields shown; extra columns are safely ignored. In a pinch, tracking CSVs can be reused as detection CSVs.)
 

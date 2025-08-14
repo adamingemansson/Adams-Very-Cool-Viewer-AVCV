@@ -282,3 +282,19 @@ ID_Coverage_{Base}_vs_{Secondary}.csv
 - [ ] Run `python AVCV.py`
 
 ---
+
+## Support
+
+**Issues:** Use GitHub Issues.  
+**Contact:** Adam Ingemansson (adam.ingemansson@gmail.com)
+
+## Citation
+
+```
+@article{AVCV,
+  title={Adam's Very Cool Viewer: Automated Detection of Cellular Interactions using Self-Supervised Deep Learning},
+  author={Adam Ingemansson},
+  journal={[Journal]},
+  year={2025}
+}
+```

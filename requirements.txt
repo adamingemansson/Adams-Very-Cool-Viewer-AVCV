@@ -1,0 +1,6 @@
+click
+numpy
+pandas
+matplotlib
+tifffile
+imagecodecs

@@ -291,7 +291,7 @@ ID_Coverage_{Base}_vs_{Secondary}.csv
 
 ```
 @article{AVCV,
-  title={Adam's Very Cool Viewer: Automated Detection of Cellular Interactions using Self-Supervised Deep Learning},
+  title={Adam's Very Cool Viewer},
   author={Adam Ingemansson},
   journal={[Journal]},
   year={2025}

@@ -61,10 +61,6 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 
 ```
 .                        # repo root
-├─ src/
-│  └─ avcv/
-│     ├─ __init__.py
-│     └─ cli.py
 ├─ scripts/
 │  ├─ AVCV.py
 │  └─ Comparison.py
@@ -76,7 +72,11 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 │  ├─ Dino_detections.csv
 │  ├─ Dino_tracks.csv
 │  ├─ Channel_1_folder/
+│  │  ├─ ex01_CamA_ch0_stack0000_488nm_0000000msec_0006155154msecAbs_000x_000y_000z_0000t.tif
+│  │  └─ ex01_CamA_ch0_stack0001_488nm_0002552msec_0006157706msecAbs_000x_000y_000z_0000t.tif
 │  └─ Channel_2_folder/
+│     ├─ ex01_CamA_ch0_stack0000_488nm_0000000msec_0006155154msecAbs_000x_000y_000z_0000t.tif
+│     └─ ex01_CamA_ch0_stack0001_488nm_0002552msec_0006157706msecAbs_000x_000y_000z_0000t.tif
 ├─ images/
 │  ├─ 1chan_vsv.png
 │  ├─ 1otherchan_vsv.png
@@ -91,6 +91,10 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 │  ├─ intro.mp4
 │  ├─ setup_example.mp4
 │  └─ track_full_time.mp4
+├─ src/
+│  └─ avcv/
+│     ├─ __init__.py
+│     └─ cli.py
 ├─ environment.yml
 ├─ pyproject.toml
 ├─ requirements.txt

@@ -30,7 +30,7 @@ import Comparison as cp
 # FOR THE COMMON USER - ONLY THE FOLLOWING PART NEEDS TO BE ADAPTED
 #-------------------------------------------------------------------------------------
 
-ROOT_DIR = "/Users/adamingemansson/AVCV_example_set_up/"
+ROOT_DIR = "/Users/adamingemansson/AVCV_Setup_Example/"
 
 # File paths to Base Dataset or Comparison file
 BASE_FILES = [
@@ -55,8 +55,8 @@ DETECTION_CONFIG = [
 
 # Channel/Volume configuration
 CHANNEL_CONFIG = [
-    {"name": "Channel 1", "path": "Channel_1_Folder", "color": "green"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
-    {"name": "Channel 2", "path": "Channel_2_Folder", "color": "red"}
+    {"name": "Ch 1", "path": "Channel_1_folder", "color": "green"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
+    {"name": "Ch 2", "path": "Channel_2_folder", "color": "red"}
     # Add Additional Channels
 ]
 
@@ -254,6 +254,8 @@ class State:
         # Initialize channel on/off states: show first channel by default for safer brightness scaling.
         self.active_channels = {label: (i == 0) for i, label in enumerate(self.channel_labels)}
         # Populate base/secondary dataset and (re)build comparison/coverage (may create CSVs lazily).
+        for i in range(len(BASE_FILES)):
+            self.base_selection(i)
         self.base_selection(0)
         try:
         # Try to load tracking/comparison/coverage CSVs; if missing, tracking is disabled gracefully.

@@ -60,17 +60,41 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 ## Repository Layout
 
 ```
-.
+.                        # repo root
+├─ src/
+│  └─ avcv/
+│     ├─ __init__.py
+│     └─ cli.py
 ├─ scripts/
-│  ├─ AVCV.py           # main viewer (runnable)
-│  └─ Comparison.py     # comparison/coverage helpers
-├─ AVCV_example_set_up/ # example scripts + (your) example CSVs go here
 │  ├─ AVCV.py
 │  └─ Comparison.py
-├─ images/              # (optional) example screenshots used in README
-├─ videos/              # (optional) example videos used in README
+├─ AVCV_Setup_Example/
+│  ├─ AVCV.py
+│  ├─ Comparison.py
+│  ├─ CME_detections.csv
+│  ├─ CME_tracks.csv
+│  ├─ Dino_detections.csv
+│  ├─ Dino_tracks.csv
+│  ├─ Channel_1_folder/
+│  └─ Channel_2_folder/
+├─ images/
+│  ├─ 1chan_vsv.png
+│  ├─ 1otherchan_vsv.png
+│  ├─ 2chan_offset.png
+│  ├─ 2chan_vsv.png
+│  ├─ maxproj_ap2.png
+│  ├─ maxproj_click_det_ap2.png
+│  ├─ setup_config.png
+│  └─ z_slice_ap2.png
+├─ videos/
+│  ├─ detections_and_base_swap.mp4
+│  ├─ intro.mp4
+│  ├─ setup_example.mp4
+│  └─ track_full_time.mp4
+├─ environment.yml
+├─ pyproject.toml
 ├─ requirements.txt
-├─ .gitignore
+├─ LICENSE
 └─ README.md
 ```
 

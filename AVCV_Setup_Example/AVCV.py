@@ -30,7 +30,7 @@ import Comparison as cp
 # FOR THE COMMON USER - ONLY THE FOLLOWING PART NEEDS TO BE ADAPTED
 #-------------------------------------------------------------------------------------
 
-ROOT_DIR = "/Users/adamingemansson/Desktop/setup_example/"
+ROOT_DIR = "/Users/adamingemansson/AVCV_Setup_Example/"
 
 # File paths to Base Dataset or Comparison file
 BASE_FILES = [

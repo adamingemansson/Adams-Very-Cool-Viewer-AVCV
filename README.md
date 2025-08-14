@@ -39,15 +39,19 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 
 ## Example Videos
 
-**1) Introduction / overview**  
+**1) Setup**  
+<video src="videos/intro.mp4" controls width="720"></video>  
+*[Download / open video](videos/setup_example.mp4)*
+
+**2) Introduction / overview**  
 <video src="videos/intro.mp4" controls width="720"></video>  
 *[Download / open video](videos/intro.mp4)*
 
-**2) Detections & swapping the Base dataset for tracking**  
+**3) Detections & swapping the Base dataset for tracking**  
 <video src="videos/detections_and_base_swap.mp4" controls width="720"></video>  
 *[Download / open video](videos/detections_and_base_swap.mp4)*
 
-**3) Full time‑series for a single track**  
+**4) Full time‑series for a single track**  
 <video src="videos/track_full_time.mp4" controls width="720"></video>  
 *[Download / open video](videos/track_full_time.mp4)*
 

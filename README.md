@@ -285,7 +285,6 @@ ID_Coverage_{Base}_vs_{Secondary}.csv
 
 ## Support
 
-**Issues:** Use GitHub Issues.  
 **Contact:** Adam Ingemansson (adam.ingemansson@gmail.com)
 
 ## Citation

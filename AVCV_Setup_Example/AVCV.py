@@ -63,6 +63,9 @@ CHANNEL_CONFIG = [
 # Channel offset in pixels (x-direction)
 CHANNEL_OFFSET = 0  # IGNORE if not needed
 
+# Background subtraction percentile (Increase to remove more background)
+BACKGROUND_PERCENTILE = 20
+
 #-------------------------------------------------------------------------------------
 
 # Configure Matplotlib keymap for saving
@@ -76,12 +79,35 @@ COMPARISON_THRESHOLD = 3.5
 
 # === Initialize State and Load Data ===
 
+def is_2d_mode(channel_path):
+    """Check if this channel is in 2D mode (single z-plane)."""
+    folders = sorted([f for f in os.listdir(channel_path) if os.path.isdir(os.path.join(channel_path, f))])
+    if not folders:
+        return True  # Default to 2D if no folders
+    
+    # Check first folder for number of z-planes
+    folder_path = os.path.join(channel_path, folders[0])
+    tif_file = find_tif_file(folder_path)
+    if not tif_file:
+        return True
+    
+    try:
+        path = os.path.join(folder_path, tif_file)
+        with tifffile.TiffFile(path) as tif:
+            return len(tif.pages) == 1
+    except Exception:
+        return True
+
 def setup_folder_structure_for_path(channel_path):
     """Ensure expected timepoint folder structure for a channel.
 
     If flat images exist directly inside the channel directory they are moved into
     numbered subfolders (001, 002, ...). For each timepoint a max projection
     file is created if missing (works for single 2D images and multi-page stacks)."""
+    
+    # Check if we're in 2D mode
+    is_2d = is_2d_mode(channel_path)
+    
     items = os.listdir(channel_path)
     allowed_exts = (".tif", ".tiff", ".png", ".jpg", ".jpeg")
     tif_files = [f for f in items if f.lower().endswith(allowed_exts)]
@@ -97,14 +123,17 @@ def setup_folder_structure_for_path(channel_path):
             new_path = os.path.join(folder_path, tif_file)
             if not os.path.exists(new_path):
                 os.rename(old_path, new_path)
-            create_maxproj_if_needed(folder_path, tif_file)
-    # Also check existing folders for missing max projection files
-    elif subdirs:
+            # Only create maxproj files in 3D mode
+            if not is_2d:
+                create_maxproj_if_needed(folder_path, tif_file)
+    # Also check existing folders for missing max projection files (only in 3D mode)
+    elif subdirs and not is_2d:
         print(f"Checking {len(subdirs)} existing subfolders in {channel_path} for missing maxproj files...")
         for subdir in subdirs:
             folder_path = os.path.join(channel_path, subdir)
             tif_file = find_tif_file(folder_path)
             if tif_file:
+                
                 create_maxproj_if_needed(folder_path, tif_file)
 
 def create_maxproj_if_needed(folder_path, tif_filename):
@@ -223,7 +252,7 @@ class State:
                     else:
                         channel_color = base_color if ch_idx == 0 else default_colors[(color_index + ch_idx - 1) % len(default_colors)]
                     self.channel_sources.append({
-                        "name": f"{config["name"]}_Ch{ch_idx+1}",
+                        "name": f"{config['name']}_Ch{ch_idx+1}",
                         "path": channel_path,
                         "folders": folders,
                         "channel_idx": ch_idx,
@@ -239,7 +268,7 @@ class State:
                     "channel_idx": 0,
                     "color": base_color
                 })
-            print(f"Added channel(s) from {config["name"]}: {n_channels} channel(s), {len(folders)} timepoints")
+            print(f"Added channel(s) from {config['name']}: {n_channels} channel(s), {len(folders)} timepoints")
         if not self.channel_sources:
             raise RuntimeError("No valid channels found in CHANNEL_CONFIG!")
         self.folders = self.channel_sources[0]["folders"]
@@ -250,20 +279,23 @@ class State:
         self.cmaps = [ch["color"] for ch in self.channel_sources]
         print(f"Total channels configured: {self.n_channels}")
         for ch in self.channel_sources:
-            print(f"  Channel: {ch["name"]} - {ch["color"]} - {len(ch["folders"])} timepoints")
+            print(f"  Channel: {ch['name']} - {ch['color']} - {len(ch['folders'])} timepoints")
         # Initialize channel on/off states: show first channel by default for safer brightness scaling.
         self.active_channels = {label: (i == 0) for i, label in enumerate(self.channel_labels)}
         # Populate base/secondary dataset and (re)build comparison/coverage (may create CSVs lazily).
-        for i in range(len(BASE_FILES)):
-            self.base_selection(i)
-        self.base_selection(0)
+        try:
+            for i in range(len(BASE_FILES)):
+                self.base_selection(i)
+            self.base_selection(0)
+        except:
+            self.has_tracking = False
         try:
         # Try to load tracking/comparison/coverage CSVs; if missing, tracking is disabled gracefully.
             ok, err = self.set_tracking_sources(self.comparison_file, self.coverage_file)
             if not ok and err:
                 print(f"Tracking disabled: {err}")
         except Exception as e:
-            print(f"Failed to initialize tracking sources: {e}")
+            pass
         # Detection datasets: collect available detection CSVs and default selections.
         self.detection_data = {}
         self.available_detections = []
@@ -272,9 +304,9 @@ class State:
                 df = pd.read_csv(config["file"])
                 self.detection_data[config["name"]] = {"data": df, "color": config["color"]}
                 self.available_detections.append(config["name"])
-                print(f"Loaded {config["name"]} detections from {config["file"]} - {len(df)} detections")
+                print(f"Loaded {config['name']} detections from {config['file']} - {len(df)} detections")
             except FileNotFoundError:
-                print(f"Warning: {config["file"]} not found - {config["name"]} detections not available")
+                print(f"Warning: {config['file']} not found - {config['name']} detections not available")
         self.active_detections = {label: False for label in self.available_detections}
         self.selected_detections = {}
         self.box_size = 20.0
@@ -349,6 +381,8 @@ class State:
         self.is_playing = False
         self.fps = 5.0
         self.manual_z_override = False
+        # Detect 2D mode: if max_z_planes is 1, we're in 2D mode
+        self.is_2d_mode = (self.max_z_planes == 1)
     
     def base_selection(self,idx):
         """Select active base / secondary dataset (radio button) and (re)build comparison / coverage.
@@ -356,8 +390,12 @@ class State:
         Handles lazy generation of comparison & coverage CSVs if they do not yet exist."""
         global BASE_FILE, SEC_FILE, BASE_NAME, SEC_NAME
         # Resolve active base dataset path/name by index.
-        self.base_file = BASE_FILES[idx]["file"]
-        self.base_name = BASE_FILES[idx]["name"]
+        try:
+            self.base_file = BASE_FILES[idx]["file"]
+            self.base_name = BASE_FILES[idx]["name"]
+        except:
+            self.base_file = ""
+            self.base_name = ""
         try:
             self.sec_file = SEC_FILES[idx]["file"]
             self.sec_name = SEC_FILES[idx]["name"]
@@ -677,7 +715,7 @@ def parse_color(val):
             return val
     return val
 
-def process_fluorescence_image(images_with_cmaps, percentile=99, multiplier=2, background_percentile=10):
+def process_fluorescence_image(images_with_cmaps, percentile=99, multiplier=1, background_percentile=BACKGROUND_PERCENTILE):
     """Convert one or multiple raw channel images into a single processed RGB image.
 
     Pipeline per channel:
@@ -1090,7 +1128,11 @@ def plot_full(ax, frame, box_size, ID_comp_df, current_id, base_name, sec_name,
         patch_channels_data = []
         left = right = top = bottom = None
         for j, ch_idx in enumerate(active_idxs):
-            img = load_maxproj_cached(frame, ch_idx) if use_maxproj else load_slice_cached(frame, state.current_z_plane, ch_idx)
+            # In 2D mode, always use z-slices; in 3D mode, use maxproj or z-slices based on setting
+            if state.is_2d_mode:
+                img = load_slice_cached(frame, state.current_z_plane, ch_idx)
+            else:
+                img = load_maxproj_cached(frame, ch_idx) if use_maxproj else load_slice_cached(frame, state.current_z_plane, ch_idx)
             if img is None:
                 continue
             patch_img, l, r, t, b = extract_centered_patch_float(img, x_patch, y_patch, int(box_size))
@@ -1191,7 +1233,11 @@ def plot_full(ax, frame, box_size, ID_comp_df, current_id, base_name, sec_name,
     # Use current global z plane (already 0-based internally) for non-maxproj zoom
     z_plane = state.current_z_plane if not use_maxproj else int(round(z_base))
     for j, ch_idx in enumerate(active_idxs):
-        img = load_maxproj_cached(frame, ch_idx) if use_maxproj else load_slice_cached(frame, z_plane, ch_idx)
+        # In 2D mode, always use z-slices; in 3D mode, use maxproj or z-slices based on setting
+        if state.is_2d_mode:
+            img = load_slice_cached(frame, state.current_z_plane, ch_idx)
+        else:
+            img = load_maxproj_cached(frame, ch_idx) if use_maxproj else load_slice_cached(frame, z_plane, ch_idx)
         if img is None:
             continue
         patch_img, l, r, t, b = extract_centered_patch_float(img, x_patch, y_patch, int(box_size))
@@ -1259,15 +1305,22 @@ ax_show_channels = fig.add_axes([0.86, 0.937, 0.1, 0.04])
 state.show_channels = False
 show_channels_checkbox = CheckButtons(ax_show_channels, ["Show channels"], [state.show_channels])
 
-if state.has_tracking:
-    ax_click_mode = fig.add_axes([0.29, 0.89, 0.1, 0.04])
-    click_mode_checkbox = CheckButtons(ax_click_mode, ["Click Mode"], [state.click_mode])
-    ax_maxproj = fig.add_axes([0.15, 0.89, 0.1, 0.04])
+# Only show max projection controls if not in 2D mode
+if not state.is_2d_mode:
+    if state.has_tracking:
+        ax_click_mode = fig.add_axes([0.29, 0.89, 0.1, 0.04])
+        click_mode_checkbox = CheckButtons(ax_click_mode, ["Click Mode"], [state.click_mode])
+        ax_maxproj = fig.add_axes([0.15, 0.89, 0.1, 0.04])
+    else:
+        ax_maxproj = fig.add_axes([0.15, 0.89, 0.1, 0.04])
+    maxproj_checkbox = CheckButtons(ax_maxproj, ["Max Projection"], [True])
+    state.show_maxproj = True
 else:
-    ax_maxproj = fig.add_axes([0.15, 0.89, 0.1, 0.04])
-
-maxproj_checkbox = CheckButtons(ax_maxproj, ["Max Projection"], [True])
-state.show_maxproj = True
+    # In 2D mode, always use single z-slices, no max projection
+    state.show_maxproj = False
+    if state.has_tracking:
+        ax_click_mode = fig.add_axes([0.29, 0.89, 0.1, 0.04])
+        click_mode_checkbox = CheckButtons(ax_click_mode, ["Click Mode"], [state.click_mode])
 
 ax_show_detections = fig.add_axes([0.01, 0.35, 0.05, len(DETECTION_CONFIG)*0.03])
 detection_states = [state.active_detections[label] for label in state.available_detections]
@@ -1298,30 +1351,42 @@ state.main_zoom = {"xmin": None, "xmax": None, "ymin": None, "ymax": None}
 state.main_img_obj = None
 state.rect_patch = None
 
-ax_zoom_maxproj = fig.add_axes([0.64, 0.937, 0.1, 0.04])
-zoom_maxproj_checkbox = CheckButtons(ax_zoom_maxproj, ["Max Projection"], [True])
-state.show_zoom_maxproj = True
+# Only show zoom max projection controls if not in 2D mode
+if not state.is_2d_mode:
+    ax_zoom_maxproj = fig.add_axes([0.64, 0.937, 0.1, 0.04])
+    zoom_maxproj_checkbox = CheckButtons(ax_zoom_maxproj, ["Max Projection"], [True])
+    state.show_zoom_maxproj = True
+else:
+    # In 2D mode, always use single z-slices for zoom
+    state.show_zoom_maxproj = False
 
 ax_center_toggle = fig.add_axes([0.75, 0.937, 0.1, 0.04])
 center_checkbox = CheckButtons(ax_center_toggle, ["Center view"], [state.center_view])
 
-ax_base_select = fig.add_axes([0.01, 0.650, 0.05, len(BASE_FILES)*0.03])
-# Radio for selecting base file (one button per BASE_FILES entry)
-_base_file_names = [bf.get("name", f"Base {i+1}") for i, bf in enumerate(BASE_FILES)]
-base_radio = RadioButtons(ax_base_select, _base_file_names, active=0)
-ax_base_select.set_title("Base\nFile", pad=15)
-
-ax_z_slider = fig.add_axes([0.07, 0.02, 0.4, 0.02])
+try:
+    if state.base_name != "":
+        ax_base_select = fig.add_axes([0.01, 0.650, 0.05, len(BASE_FILES)*0.03])
+    _base_file_names = [bf.get("name", f"Base {i+1}") for i, bf in enumerate(BASE_FILES)]
+    # Radio for selecting base file (one button per BASE_FILES entry)
+    if not state.is_2d_mode:
+        ax_z_slider = fig.add_axes([0.07, 0.02, 0.4, 0.02])
+    base_radio = RadioButtons(ax_base_select, _base_file_names, active=0)
+    ax_base_select.set_title("Base\nFile", pad=15)
+except:
+    print("No Base Files were found!")
 
 def _on_base_file_change(label):
     """Switch base/secondary selection and refresh tracking sources when radio changes."""
     try:
         idx = _base_file_names.index(label)
+        
     except ValueError:
         print(f"Unknown base label: {label}")
         return
-    state.base_selection(idx)
-base_radio.on_clicked(_on_base_file_change)
+try:
+    base_radio.on_clicked(_on_base_file_change)
+except:
+    pass
 
 channel_patch_axes = []
 def create_channel_patch_axes():
@@ -1374,8 +1439,11 @@ def plot_channel_patches(frame, patch_center, box_size_val, z_tol_val, use_maxpr
             break
         ax = channel_patch_axes[i]
         ax.clear()
-        # Load image for this channel
-        slice_img = load_maxproj_cached(frame, i) if use_maxproj else load_slice_cached(frame, state.current_z_plane, i)
+        # In 2D mode, always use z-slices; in 3D mode, use maxproj or z-slices based on setting
+        if state.is_2d_mode:
+            slice_img = load_slice_cached(frame, state.current_z_plane, i)
+        else:
+            slice_img = load_maxproj_cached(frame, i) if use_maxproj else load_slice_cached(frame, state.current_z_plane, i)
         if slice_img is None:
             ax.axis("off")
             ax.set_title(f"{ch_label} - No Data", fontsize=10)
@@ -1502,10 +1570,11 @@ def update_plot(*args):
         slider_frame.poly.set_color(sec_color); slider_frame._handle.set_color(sec_color)
     except Exception:
         pass
-    try:
-        z_slider.poly.set_color(sec_color); z_slider._handle.set_color(sec_color)
-    except Exception:
-        pass
+    if not state.is_2d_mode:
+        try:
+            z_slider.poly.set_color(sec_color); z_slider._handle.set_color(sec_color)
+        except Exception:
+            pass
 
     # Main image
     main_ax.clear(); main_ax.axis("on")
@@ -1515,7 +1584,11 @@ def update_plot(*args):
     for i, ch_label in enumerate(state.channel_labels):
         if not state.active_channels[ch_label]:
             continue
-        img = load_maxproj_cached(frame, i) if state.show_maxproj else load_slice_cached(frame, state.current_z_plane, i)
+        # In 2D mode, always use z-slices; in 3D mode, use maxproj or z-slices based on setting
+        if state.is_2d_mode:
+            img = load_slice_cached(frame, state.current_z_plane, i)
+        else:
+            img = load_maxproj_cached(frame, i) if state.show_maxproj else load_slice_cached(frame, state.current_z_plane, i)
         if img is None:
             continue
         active_channels_data.append((i, img, state.cmaps[i]))
@@ -1595,6 +1668,12 @@ def update_z_plane():
     """Adjust z plane toward natural tracked z for current ID (when not in max projection)."""
     if not state.has_tracking or state.current_id is None or state.click_mode:
         return
+    
+    # In 2D mode, z-plane is always 0 (single plane)
+    if state.is_2d_mode:
+        state.current_z_plane = 0
+        return
+        
     frame = state.current_frame
     id_val = state.current_id
     # Get correct column names using the unified function
@@ -1611,11 +1690,11 @@ def update_z_plane():
             last_t = subdf["t"].max()
             z_val = int(round(subdf[subdf["t"] == last_t][z_col].values[0]))
         else:
-            z_val = 25
+            z_val = 0  # Default to first z-plane in 3D mode
     # Clamp within valid range
     z_val = max(0, min(state.max_z_planes, z_val))
     state.current_z_plane = z_val
-    if not state.show_maxproj:
+    if not state.show_maxproj and not state.is_2d_mode:
         z_slider.set_val(z_val)
 
 # === Event Handlers for UI Interactions ===
@@ -1633,7 +1712,7 @@ def on_show_channels_toggle(label):
 
 show_channels_checkbox.on_clicked(on_show_channels_toggle)
 
-if state.has_tracking:
+if state.has_tracking and not state.is_2d_mode:
     def on_click_mode_toggle(label):
         state.click_mode = not state.click_mode
         if state.click_mode and state.center_view:
@@ -1651,20 +1730,31 @@ if state.has_tracking:
         update_plot()
 
     click_mode_checkbox.on_clicked(on_click_mode_toggle)
+elif state.has_tracking and state.is_2d_mode:
+    def on_click_mode_toggle(label):
+        state.click_mode = not state.click_mode
+        if state.click_mode and state.center_view:
+            state.center_view = True
+            center_checkbox.set_active(0)
+        update_plot()
 
-def on_maxproj_toggle(label):
-    state.show_maxproj = not state.show_maxproj
-    ax_z_slider.set_visible(not state.show_maxproj)
-    if not state.show_maxproj:
-        if not state.has_tracking:
-            state.current_z_plane = state.max_z_planes // 2
-            z_slider.set_val(state.current_z_plane)
-        else:
-            update_z_plane()
-    fig.canvas.draw_idle()
-    update_plot()
+    click_mode_checkbox.on_clicked(on_click_mode_toggle)
 
-maxproj_checkbox.on_clicked(on_maxproj_toggle)
+# Only create max projection event handler if not in 2D mode
+if not state.is_2d_mode:
+    def on_maxproj_toggle(label):
+        state.show_maxproj = not state.show_maxproj
+        ax_z_slider.set_visible(not state.show_maxproj)
+        if not state.show_maxproj:
+            if not state.has_tracking:
+                state.current_z_plane = state.max_z_planes // 2
+                z_slider.set_val(state.current_z_plane)
+            else:
+                update_z_plane()
+        fig.canvas.draw_idle()
+        update_plot()
+
+    maxproj_checkbox.on_clicked(on_maxproj_toggle)
 
 def on_show_detections_toggle(label):
     """UI callback `on_show_channels_toggle`.
@@ -1682,11 +1772,13 @@ def on_show_detections_toggle(label):
 
 show_detections_checkbox.on_clicked(on_show_detections_toggle)
 
-def on_zoom_maxproj_toggle(label):
-    state.show_zoom_maxproj = not state.show_zoom_maxproj
-    update_plot()
+# Only create zoom max projection event handler if not in 2D mode
+if not state.is_2d_mode:
+    def on_zoom_maxproj_toggle(label):
+        state.show_zoom_maxproj = not state.show_zoom_maxproj
+        update_plot()
 
-zoom_maxproj_checkbox.on_clicked(on_zoom_maxproj_toggle)
+    zoom_maxproj_checkbox.on_clicked(on_zoom_maxproj_toggle)
 
 def on_center_toggle(label):
     # Toggle auto-centering; immediate recalc if enabling
@@ -1873,10 +1965,12 @@ def on_z_change(val):
     update_plot()
 
 # Z slider: fixed range 1..max_z_planes (1-based). Does not change after init.
-z_slider = Slider(ax_z_slider, "z:", 1, state.max_z_planes, valinit=state.current_z_plane, valstep=1)
-ax_z_slider.set_visible(False)
-z_slider.vline.set_visible(False)
-z_slider.on_changed(on_z_change)
+if not state.is_2d_mode:
+    z_slider = Slider(ax_z_slider, "z:", 1, state.max_z_planes, valinit=state.current_z_plane, valstep=1)
+    ax_z_slider.set_visible(False)
+    z_slider.vline.set_visible(False)
+    z_slider.on_changed(on_z_change)
+
 
 def on_key(event):
     movement = {
@@ -1900,7 +1994,7 @@ def on_key(event):
         state.view_center[1] += dy
         update_plot()
     elif event.key in ["left", "right"]:
-        if ax_z_slider.get_visible() and event.inaxes == ax_z_slider:
+        if not state.is_2d_mode and ax_z_slider.get_visible() and event.inaxes == ax_z_slider:
             new_z = state.current_z_plane + (-1 if event.key == "left" else 1)
             if event.key == "left":
                 new_z = max(0, new_z)

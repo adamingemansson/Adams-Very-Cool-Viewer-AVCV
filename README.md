@@ -13,15 +13,15 @@ An interactive viewer for **multi‑channel time‑series microscopy data** (opt
 
 ## Example Screenshots
 
-**Maxprojection mode in comparison mode**  
+**Max Projection Mode in Comparison Mode**  
 ![Maxprojection AP2](images/maxproj_ap2.png)  
-*Shows the viewer in max‑projection mode, comparing two datasets across all z‑slices. Useful for quickly spotting co‑localization or differences over time.*
+*Shows the viewer in Max Projection Mode, comparing two datasets across all z‑slices. Useful for quickly spotting co‑localization or differences over time.*
 
-**Maxprojection mode in click mode with detections**  
+**Max Projection Mode in Click Mode with Detections**  
 ![Maxprojection Click with Detections AP2](images/maxproj_click_det_ap2.png)  
-*Demonstrates max‑projection combined with click‑to‑center functionality in detection mode. Detection points are overlaid, and clicking recenters the view on the selected object.*
+*Demonstrates Max Projection combined with click‑to‑center functionality in detection mode. Detection points are overlaid, and clicking recenters the view on the selected object.*
 
-**Without maxprojection — selected z‑slice**  
+**Without Max Projection - selected z‑slice**  
 ![Z Slice AP2](images/z_slice_ap2.png)  
 *Displays a single selected z‑plane instead of a projection. Helpful for examining structures at a specific focal depth.*
 

@@ -1,10 +1,10 @@
-"""Interactive imaging viewer.
+"""AVCV - Interactive imaging viewer.
 
 Features:
     - Multi-channel time series (optionally z-stacks) with synchronous display.
     - Unified image processing: percentile normalization, background subtraction,
         pure additive RGB color mapping and optional per-channel x-offset.
-    - Tracking mode: navigate IDs, plot normalized fluorescence intensity (FI) traces
+    - Tracking mode: navigate IDs and tracks in 3D, plot normalized fluorescence intensity (FI) traces
         with optional comparison / coverage segmentation.
     - Detection mode: display detection points for selected sources, click-to-center.
     - Dynamic channel activation and per-channel patch views for quick inspection.
@@ -27,7 +27,9 @@ import ast
 from functools import lru_cache
 import Comparison as cp
 
-# FOR THE COMMON USER - ONLY THE FOLLOWING PART NEEDS TO BE ADAPTED
+# === USER CONFIGURATION SECTION ===
+# Modify the settings below to adapt the viewer to your data structure and requirements.
+# No changes should be needed outside this section for normal usage.
 #-------------------------------------------------------------------------------------
 
 ROOT_DIR = "/Users/adamingemansson/AVCV_Setup_Example/"
@@ -55,16 +57,25 @@ DETECTION_CONFIG = [
 
 # Channel/Volume configuration
 CHANNEL_CONFIG = [
-    {"name": "Ch 1", "path": "Channel_1_folder", "color": "green"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
-    {"name": "Ch 2", "path": "Channel_2_folder", "color": "red"}
+    {"name": "Channel 1", "path": "Channel_1_folder", "color": "green"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
+    #{"name": "Channel 2", "path": "Channel_2_folder", "color": "red"}
     # Add Additional Channels
 ]
+
+#-------------------------------------------------------------------------------------
+
+# === IMAGE PROCESSING PARAMETERS ===
+# Fine-tune how fluorescence images are processed and displayed for optimal visualization
+#-------------------------------------------------------------------------------------
 
 # Channel offset in pixels (x-direction)
 CHANNEL_OFFSET = 0  # IGNORE if not needed
 
+# Maximum intensity clip value (prevents harsh saturation, e.g. 0.5 = 50% of full range)
+INTENSITY_CEILING = 0.5
+
 # Background subtraction percentile (Increase to remove more background)
-BACKGROUND_PERCENTILE = 20
+BACKGROUND_PERCENTILE = 1
 
 #-------------------------------------------------------------------------------------
 
@@ -383,7 +394,9 @@ class State:
         self.manual_z_override = False
         # Detect 2D mode: if max_z_planes is 1, we're in 2D mode
         self.is_2d_mode = (self.max_z_planes == 1)
-    
+        # Plot mode toggle (False = FI plot, True = 3D tracks)
+        self.show_tracks_3d = False
+
     def base_selection(self,idx):
         """Select active base / secondary dataset (radio button) and (re)build comparison / coverage.
 
@@ -715,7 +728,7 @@ def parse_color(val):
             return val
     return val
 
-def process_fluorescence_image(images_with_cmaps, percentile=99, multiplier=1, background_percentile=BACKGROUND_PERCENTILE):
+def process_fluorescence_image(images_with_cmaps, percentile=99, multiplier=1, background_percentile=BACKGROUND_PERCENTILE, vmax=INTENSITY_CEILING):
     """Convert one or multiple raw channel images into a single processed RGB image.
 
     Pipeline per channel:
@@ -765,8 +778,8 @@ def process_fluorescence_image(images_with_cmaps, percentile=99, multiplier=1, b
         
         # Step 1: Normalize using percentile method (like original)
         img_max = multiplier * np.percentile(img, percentile) if img.size else 1
-        img_normalized = np.clip(img / (img_max + 1e-8), 0, 0.8)
-        
+        img_normalized = np.clip(img / (img_max + 1e-8), 0, vmax)
+
         # Step 2: Background correction per channel
         background = np.percentile(img_normalized, background_percentile)
         
@@ -1341,6 +1354,17 @@ if not state.has_tracking:
     # Hide FI axes when tracking is unavailable.
     FI_ax.set_visible(False)
 
+# 3D tracks axis (initially hidden) and plot mode toggle checkbox (only if tracking available)
+track3d_ax = fig.add_axes([0.51, 0.18, 0.2, 0.28], projection='3d')
+track3d_ax.set_visible(False)
+plotmode_checkbox = None
+if state.has_tracking:
+    try:
+        ax_plotmode = fig.add_axes([0.555, 0.07, 0.11, 0.04])
+        plotmode_checkbox = CheckButtons(ax_plotmode, ["3D Tracks"], [state.show_tracks_3d])
+    except Exception as e:
+        print("Failed to create plot mode checkbox:", e)
+
 zoom_ax = fig.add_axes([0.475, 0.50, 0.27, 0.39])
 axbox = fig.add_axes([0.22, 0.94, 0.09, 0.035])
 ax_boxsize = fig.add_axes([0.5, 0.94, 0.05, 0.035])
@@ -1379,10 +1403,12 @@ def _on_base_file_change(label):
     """Switch base/secondary selection and refresh tracking sources when radio changes."""
     try:
         idx = _base_file_names.index(label)
-        
     except ValueError:
         print(f"Unknown base label: {label}")
         return
+    # Always update state and UI
+    state.base_selection(idx)
+    update_plot()
 try:
     base_radio.on_clicked(_on_base_file_change)
 except:
@@ -1552,16 +1578,42 @@ def update_plot(*args):
             choice_t = choice[choice["t"] == frame]
             sec_color = "red" if not choice_t.empty else "gray"
 
-        FI_ax.clear()
-        if not (state.has_comparison and state.sec):
-            FI_data = FI(state.current_id, state.Comp, state.Cov, state.base)
-        FI_plot(state.current_id, FI_data, t_current=frame, current_color=sec_color,
-                ax=FI_ax, base_name=state.base, sec_name=state.sec,
-                is_single_tracking=(not state.has_comparison))
-        FI_ax.set_xlim(0, state.max_frame)
-        FI_ax.set_ylim(0, 1.1)
+        if state.show_tracks_3d:
+            # Show 3D, hide FI
+            try:
+                FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
+            except Exception:
+                pass
+            try:
+                track3d_ax.set_visible(True); track3d_ax.clear()
+                plot_tracks_3d(track3d_ax, state.current_id, frame, sec_color)
+            except Exception:
+                pass
+        else:
+            # Show FI plot, hide 3D
+            try:
+                track3d_ax.clear(); track3d_ax.set_visible(False)
+            except Exception:
+                pass
+            FI_ax.set_visible(True); FI_ax.axis("on")
+            FI_ax.clear()
+            if not (state.has_comparison and state.sec):
+                FI_data = FI(state.current_id, state.Comp, state.Cov, state.base)
+            FI_plot(state.current_id, FI_data, t_current=frame, current_color=sec_color,
+                    ax=FI_ax, base_name=state.base, sec_name=state.sec,
+                    is_single_tracking=(not state.has_comparison))
+            FI_ax.set_xlim(0, state.max_frame)
+            FI_ax.set_ylim(0, 1.1)
     else:
-        FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
+        # No tracking active or no ID: hide both FI and 3D axes
+        try:
+            FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
+        except Exception:
+            pass
+        try:
+            track3d_ax.clear(); track3d_ax.set_visible(False)
+        except Exception:
+            pass
         sec_color = "red"
         ID_Comp = pd.DataFrame()
 
@@ -1663,6 +1715,132 @@ def update_plot(*args):
                          use_maxproj=state.show_zoom_maxproj)
     fig.canvas.draw_idle()
 #
+
+# === 3D Track Plot Helper ===
+def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
+    """Plot base track (red) + comparison tracks (rainbow) mimicking FI_plot color scheme.
+
+    Args:
+        ax3d: 3D matplotlib axes
+        base_id: currently selected base ID
+        current_frame: time frame for highlighting
+        highlight_color: color for current frame marker on base track
+    """
+    if ax3d is None or base_id is None or state.Comp is None:
+        return
+    comp = state.Comp
+    id_base_col = state.id_col_base
+    id_sec_col = getattr(state, 'id_col_sec', None)
+    # Resolve column variants (with parentheses) for base / sec
+    def col_for(prefix, dataset):
+        if dataset:
+            cand = f"{prefix} ({dataset})"
+            if cand in comp.columns:
+                return cand
+        return prefix if prefix in comp.columns else None
+    x_b = col_for('x', state.base); y_b = col_for('y', state.base); z_b = col_for('z', state.base)
+    x_s = col_for('x', state.sec); y_s = col_for('y', state.sec); z_s = col_for('z', state.sec)
+    t_col = 't' if 't' in comp.columns else get_column_name('t')
+    if not (id_base_col and x_b and y_b and t_col and id_base_col in comp.columns):
+        return
+    base_df = comp[comp[id_base_col] == base_id].copy()
+    if base_df.empty:
+        return
+    if t_col in base_df.columns:
+        base_df.sort_values(t_col, inplace=True)
+    tb = base_df[t_col].to_numpy()
+    xb = base_df[x_b].to_numpy(); yb = base_df[y_b].to_numpy(); zb = base_df[z_b].to_numpy() if z_b and z_b in base_df.columns else np.zeros_like(xb)
+    gaps = np.where(np.diff(tb) > 1)[0] + 1
+    segs = np.split(np.arange(tb.size), gaps) if gaps.size else [np.arange(tb.size)]
+    for si, seg in enumerate(segs):
+        if seg.size == 1:
+            i0 = seg[0]
+            ax3d.plot([xb[i0]-0.01, xb[i0]+0.01], [yb[i0]-0.01, yb[i0]+0.01], [zb[i0], zb[i0]], color='red', linewidth=2,
+                      label=f"{state.base_name} ID: {int(base_id)}" if si==0 else None)
+        else:
+            ax3d.plot(xb[seg], yb[seg], zb[seg], color='red', linewidth=2,
+                      label=f"{state.base_name} ID: {int(base_id)}" if si==0 else None)
+    # Highlight current frame points: base (always) + any secondary IDs with data at this frame
+    if current_frame is not None:
+        if current_frame in base_df[t_col].values:
+            r_now = base_df[base_df[t_col] == current_frame].iloc[0]
+            ax3d.scatter(r_now[x_b], r_now[y_b], r_now[z_b] if z_b and z_b in base_df.columns else 0,
+                         color="red", s=30, zorder=60, label=None)
+        # Highlight secondary current points (same color mapping as track segments)
+        if state.has_comparison and state.sec and id_sec_col and id_sec_col in comp.columns and x_s and y_s:
+            sec_rows = comp[(comp[id_base_col] == base_id) & (comp[t_col] == current_frame)]
+            if not sec_rows.empty:
+                sec_ids_now = sec_rows[id_sec_col].dropna().unique()
+                all_sec_ids = comp.loc[comp[id_base_col] == base_id, id_sec_col].dropna().unique()
+                # Reproduce color assignment used above
+                colors_map = {}
+                if len(all_sec_ids):
+                    palette = [plt.cm.gist_rainbow((i+1)/(len(all_sec_ids)+1)) for i in range(len(all_sec_ids))]
+                    for colr, sid in zip(palette, all_sec_ids):
+                        colors_map[sid] = colr
+                for sid in sec_ids_now:
+                    row_s_now = sec_rows[sec_rows[id_sec_col] == sid].iloc[0]
+                    xs_val = row_s_now[x_s]; ys_val = row_s_now[y_s]
+                    zs_val = row_s_now[z_s] if z_s and z_s in sec_rows.columns else 0
+                    c = colors_map.get(sid, 'blue')
+                    ax3d.scatter(xs_val, ys_val, zs_val, color=c, s=30, zorder=55, label=None)
+
+        
+    # Secondary tracks
+    if state.has_comparison and state.sec and id_sec_col and id_sec_col in comp.columns and x_s and y_s:
+        sec_ids = comp.loc[comp[id_base_col] == base_id, id_sec_col].dropna().unique()
+        if len(sec_ids):
+            colors = [plt.cm.gist_rainbow((i+1)/(len(sec_ids)+1)) for i in range(len(sec_ids))]
+            for color, sid in zip(colors, sec_ids):
+                sdf = comp[comp[id_sec_col] == sid].copy()
+                if sdf.empty:
+                    continue
+                if t_col in sdf.columns:
+                    sdf.sort_values(t_col, inplace=True)
+                ts = sdf[t_col].to_numpy()
+                xs = sdf[x_s].to_numpy(); ys = sdf[y_s].to_numpy(); zs = sdf[z_s].to_numpy() if z_s and z_s in sdf.columns else np.zeros_like(xs)
+                gaps2 = np.where(np.diff(ts) > 1)[0] + 1
+                segs2 = np.split(np.arange(ts.size), gaps2) if gaps2.size else [np.arange(ts.size)]
+                for si, seg in enumerate(segs2):
+                    if seg.size == 1:
+                        i0 = seg[0]
+                        ax3d.plot([xs[i0]-0.01, xs[i0]+0.01], [ys[i0]-0.01, ys[i0]+0.01], [zs[i0], zs[i0]], color=color, linewidth=1.5,
+                                  label=f"{state.sec_name} ID: {int(sid)}" if si==0 else None)
+                    else:
+                        ax3d.plot(xs[seg], ys[seg], zs[seg], color=color, linewidth=1.5,
+                                  label=f"{state.sec_name} ID: {int(sid)}" if si==0 else None)
+    ax3d.set_xlabel('x'); ax3d.set_ylabel('y'); ax3d.set_zlabel('z')
+    ax3d.set_title('3D Tracks')
+    try:
+        h, l = ax3d.get_legend_handles_labels()
+        uniq = {}
+        for hh,ll in zip(h,l):
+            if ll and ll not in uniq:
+                uniq[ll] = hh
+        if uniq:
+            ax3d.legend(uniq.values(), uniq.keys(), fontsize=6, loc="upper right", bbox_to_anchor=(1.3, 1))
+    except Exception:
+        pass
+
+def on_plotmode_toggle(label):
+    if not state.has_tracking:
+        return
+    state.show_tracks_3d = not state.show_tracks_3d
+    update_plot()
+    # Swap label text so the box always shows the alternative view
+    try:
+        if plotmode_checkbox is not None and plotmode_checkbox.labels:
+            new_text = "FI Plot" if state.show_tracks_3d else "3D Tracks"
+            plotmode_checkbox.labels[0].set_text(new_text)
+            fig.canvas.draw_idle()
+    except Exception:
+        pass
+
+try:
+    if plotmode_checkbox is not None:
+        plotmode_checkbox.on_clicked(on_plotmode_toggle)
+except Exception as e:
+    print("Plot mode checkbox binding failed:", e)
 
 def update_z_plane():
     """Adjust z plane toward natural tracked z for current ID (when not in max projection)."""

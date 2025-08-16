@@ -1,10 +1,10 @@
-"""AVCV - Interactive imaging viewer.
+"""Interactive imaging viewer.
 
 Features:
     - Multi-channel time series (optionally z-stacks) with synchronous display.
     - Unified image processing: percentile normalization, background subtraction,
         pure additive RGB color mapping and optional per-channel x-offset.
-    - Tracking mode: navigate IDs and tracks in 3D, plot normalized fluorescence intensity (FI) traces
+    - Tracking mode: navigate IDs, plot normalized fluorescence intensity (FI) traces
         with optional comparison / coverage segmentation.
     - Detection mode: display detection points for selected sources, click-to-center.
     - Dynamic channel activation and per-channel patch views for quick inspection.
@@ -27,12 +27,10 @@ import ast
 from functools import lru_cache
 import Comparison as cp
 
-# === USER CONFIGURATION SECTION ===
-# Modify the settings below to adapt the viewer to your data structure and requirements.
-# No changes should be needed outside this section for normal usage.
+# File Paths to tracking
 #-------------------------------------------------------------------------------------
 
-ROOT_DIR = "/Users/adamingemansson/AVCV_Setup_Example/"
+ROOT_DIR = "/Users/adamingemansson/presentation_250812/"
 
 # File paths to Base Dataset or Comparison file
 BASE_FILES = [
@@ -57,22 +55,18 @@ DETECTION_CONFIG = [
 
 # Channel/Volume configuration
 CHANNEL_CONFIG = [
-    {"name": "Channel 1", "path": "Channel_1_folder", "color": "green"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
-    #{"name": "Channel 2", "path": "Channel_2_folder", "color": "red"}
+    {"name": "Ch 1", "path": "488", "color": "white"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
+    #{"name": "Ch 2", "path": "560", "color": "red"}
     # Add Additional Channels
 ]
 
 #-------------------------------------------------------------------------------------
 
-# === IMAGE PROCESSING PARAMETERS ===
-# Fine-tune how fluorescence images are processed and displayed for optimal visualization
-#-------------------------------------------------------------------------------------
-
 # Channel offset in pixels (x-direction)
 CHANNEL_OFFSET = 0  # IGNORE if not needed
 
-# Maximum intensity clip value (prevents harsh saturation, e.g. 0.5 = 50% of full range)
-INTENSITY_CEILING = 0.5
+# Maximum intensity clip value (prevents harsh saturation, 0.8 = 80% of full range)
+INTENSITY_CEILING = 1
 
 # Background subtraction percentile (Increase to remove more background)
 BACKGROUND_PERCENTILE = 1
@@ -263,7 +257,7 @@ class State:
                     else:
                         channel_color = base_color if ch_idx == 0 else default_colors[(color_index + ch_idx - 1) % len(default_colors)]
                     self.channel_sources.append({
-                        "name": f"{config['name']}_Ch{ch_idx+1}",
+                        "name": f"{config["name"]}_Ch{ch_idx+1}",
                         "path": channel_path,
                         "folders": folders,
                         "channel_idx": ch_idx,
@@ -279,7 +273,7 @@ class State:
                     "channel_idx": 0,
                     "color": base_color
                 })
-            print(f"Added channel(s) from {config['name']}: {n_channels} channel(s), {len(folders)} timepoints")
+            print(f"Added channel(s) from {config["name"]}: {n_channels} channel(s), {len(folders)} timepoints")
         if not self.channel_sources:
             raise RuntimeError("No valid channels found in CHANNEL_CONFIG!")
         self.folders = self.channel_sources[0]["folders"]
@@ -290,7 +284,7 @@ class State:
         self.cmaps = [ch["color"] for ch in self.channel_sources]
         print(f"Total channels configured: {self.n_channels}")
         for ch in self.channel_sources:
-            print(f"  Channel: {ch['name']} - {ch['color']} - {len(ch['folders'])} timepoints")
+            print(f"  Channel: {ch["name"]} - {ch["color"]} - {len(ch["folders"])} timepoints")
         # Initialize channel on/off states: show first channel by default for safer brightness scaling.
         self.active_channels = {label: (i == 0) for i, label in enumerate(self.channel_labels)}
         # Populate base/secondary dataset and (re)build comparison/coverage (may create CSVs lazily).
@@ -315,9 +309,9 @@ class State:
                 df = pd.read_csv(config["file"])
                 self.detection_data[config["name"]] = {"data": df, "color": config["color"]}
                 self.available_detections.append(config["name"])
-                print(f"Loaded {config['name']} detections from {config['file']} - {len(df)} detections")
+                print(f"Loaded {config["name"]} detections from {config["file"]} - {len(df)} detections")
             except FileNotFoundError:
-                print(f"Warning: {config['file']} not found - {config['name']} detections not available")
+                print(f"Warning: {config["file"]} not found - {config["name"]} detections not available")
         self.active_detections = {label: False for label in self.available_detections}
         self.selected_detections = {}
         self.box_size = 20.0
@@ -1299,7 +1293,7 @@ def plot_full(ax, frame, box_size, ID_comp_df, current_id, base_name, sec_name,
     label_prefix = f"{base_name} ID" if base_name and isinstance(base_name, str) and base_name.strip() else "ID"
     info_lines = [f"z = {int(round(z_base))}", f"{label_prefix}: {int(current_id)}"]
     if state.has_comparison and sec_point is not None and x_base is not None:
-        dist = float(np.hypot(sx - x_base, sy - y_base)) if 'sx' in locals() and 'sy' in locals() else None
+        dist = float(np.hypot(sx - x_base, sy - y_base)) if "sx" in locals() and "sy" in locals() else None
         if dist is not None:
             info_lines.append(f"Distance: {dist:.1f}")
     ax.text(0.01, 0.99,
@@ -1355,12 +1349,12 @@ if not state.has_tracking:
     FI_ax.set_visible(False)
 
 # 3D tracks axis (initially hidden) and plot mode toggle checkbox (only if tracking available)
-track3d_ax = fig.add_axes([0.51, 0.18, 0.2, 0.28], projection='3d')
+track3d_ax = fig.add_axes([0.51, 0.18, 0.2, 0.28], projection="3d")
 track3d_ax.set_visible(False)
 plotmode_checkbox = None
 if state.has_tracking:
     try:
-        ax_plotmode = fig.add_axes([0.555, 0.07, 0.11, 0.04])
+        ax_plotmode = fig.add_axes([0.575, 0.07, 0.07, 0.04])
         plotmode_checkbox = CheckButtons(ax_plotmode, ["3D Tracks"], [state.show_tracks_3d])
     except Exception as e:
         print("Failed to create plot mode checkbox:", e)
@@ -1407,6 +1401,7 @@ def _on_base_file_change(label):
         print(f"Unknown base label: {label}")
         return
     # Always update state and UI
+    text_box.label.set_text(f"{state.base} ID:")
     state.base_selection(idx)
     update_plot()
 try:
@@ -1730,7 +1725,7 @@ def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
         return
     comp = state.Comp
     id_base_col = state.id_col_base
-    id_sec_col = getattr(state, 'id_col_sec', None)
+    id_sec_col = getattr(state, "id_col_sec", None)
     # Resolve column variants (with parentheses) for base / sec
     def col_for(prefix, dataset):
         if dataset:
@@ -1738,9 +1733,9 @@ def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
             if cand in comp.columns:
                 return cand
         return prefix if prefix in comp.columns else None
-    x_b = col_for('x', state.base); y_b = col_for('y', state.base); z_b = col_for('z', state.base)
-    x_s = col_for('x', state.sec); y_s = col_for('y', state.sec); z_s = col_for('z', state.sec)
-    t_col = 't' if 't' in comp.columns else get_column_name('t')
+    x_b = col_for("x", state.base); y_b = col_for("y", state.base); z_b = col_for("z", state.base)
+    x_s = col_for("x", state.sec); y_s = col_for("y", state.sec); z_s = col_for("z", state.sec)
+    t_col = "t" if "t" in comp.columns else get_column_name("t")
     if not (id_base_col and x_b and y_b and t_col and id_base_col in comp.columns):
         return
     base_df = comp[comp[id_base_col] == base_id].copy()
@@ -1755,10 +1750,10 @@ def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
     for si, seg in enumerate(segs):
         if seg.size == 1:
             i0 = seg[0]
-            ax3d.plot([xb[i0]-0.01, xb[i0]+0.01], [yb[i0]-0.01, yb[i0]+0.01], [zb[i0], zb[i0]], color='red', linewidth=2,
+            ax3d.plot([xb[i0]-0.01, xb[i0]+0.01], [yb[i0]-0.01, yb[i0]+0.01], [zb[i0], zb[i0]], color="red", linewidth=2,
                       label=f"{state.base_name} ID: {int(base_id)}" if si==0 else None)
         else:
-            ax3d.plot(xb[seg], yb[seg], zb[seg], color='red', linewidth=2,
+            ax3d.plot(xb[seg], yb[seg], zb[seg], color="red", linewidth=2,
                       label=f"{state.base_name} ID: {int(base_id)}" if si==0 else None)
     # Highlight current frame points: base (always) + any secondary IDs with data at this frame
     if current_frame is not None:
@@ -1782,7 +1777,7 @@ def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
                     row_s_now = sec_rows[sec_rows[id_sec_col] == sid].iloc[0]
                     xs_val = row_s_now[x_s]; ys_val = row_s_now[y_s]
                     zs_val = row_s_now[z_s] if z_s and z_s in sec_rows.columns else 0
-                    c = colors_map.get(sid, 'blue')
+                    c = colors_map.get(sid, "blue")
                     ax3d.scatter(xs_val, ys_val, zs_val, color=c, s=30, zorder=55, label=None)
 
         
@@ -1809,8 +1804,8 @@ def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
                     else:
                         ax3d.plot(xs[seg], ys[seg], zs[seg], color=color, linewidth=1.5,
                                   label=f"{state.sec_name} ID: {int(sid)}" if si==0 else None)
-    ax3d.set_xlabel('x'); ax3d.set_ylabel('y'); ax3d.set_zlabel('z')
-    ax3d.set_title('3D Tracks')
+    ax3d.set_xlabel("x"); ax3d.set_ylabel("y"); ax3d.set_zlabel("z")
+    ax3d.set_title("3D Tracks")
     try:
         h, l = ax3d.get_legend_handles_labels()
         uniq = {}

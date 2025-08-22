@@ -27,48 +27,54 @@ import ast
 from functools import lru_cache
 import Comparison as cp
 
-# File Paths to tracking
+# === USER CONFIGURATION SECTION ===
+# Modify the settings below to adapt the viewer to your data structure and requirements.
+# No changes should be needed outside this section for normal usage.
 #-------------------------------------------------------------------------------------
 
 ROOT_DIR = "/Users/adamingemansson/presentation_250812/"
 
-# File paths to Base Dataset or Comparison file
+# Primary tracking datasets - used as base reference for analysis
 BASE_FILES = [
     {"name": "CME", "file": "CME_tracks.csv"},
     {"name": "Dino", "file": "Dino_tracks.csv"}
     # Add Additional Files
 ]
 
-# Configuration for the datasets to compare. IGNORE if comparison is not needed
+# Secondary tracking datasets - compared against BASE_FILES for dual-tracking analysis
 SEC_FILES = [
     {"name": "Dino", "file": "Dino_tracks.csv"},
     {"name": "CME", "file": "CME_tracks.csv"}
     # Add Additional Files
 ]
 
-# Detection configuration
+# Detection point overlays - CSV files containing x,y,t coordinates to display as scatter points
 DETECTION_CONFIG = [
     {"name": "CME", "file": "CME_detections.csv", "color": "blue"},
     {"name": "Dino", "file": "Dino_detections.csv", "color": "red"}
     # Add Additional Files
 ]
 
-# Channel/Volume configuration
+# Image channel sources - folders containing time-series image data (TIFF stacks or 2D sequences)
 CHANNEL_CONFIG = [
     {"name": "Ch 1", "path": "488", "color": "white"},  # Choose from: "red", "green", "blue", "white", "magenta", "cyan", "yellow", "orange"
-    #{"name": "Ch 2", "path": "560", "color": "red"}
+    {"name": "Ch 2", "path": "560", "color": "red"}
     # Add Additional Channels
 ]
 
 #-------------------------------------------------------------------------------------
 
+# === IMAGE PROCESSING PARAMETERS ===
+# Fine-tune how fluorescence images are processed and displayed for optimal visualization
+#-------------------------------------------------------------------------------------
+
 # Channel offset in pixels (x-direction)
 CHANNEL_OFFSET = 0  # IGNORE if not needed
 
-# Maximum intensity clip value (prevents harsh saturation, 0.8 = 80% of full range)
-INTENSITY_CEILING = 1
+# Maximum intensity clip value (prevents harsh saturation, e.g. 0.5 = 50% of full range)
+INTENSITY_CEILING = 0.5
 
-# Background subtraction percentile (Increase to remove more background)
+# Background subtraction percentile (Increase to remove more background)d
 BACKGROUND_PERCENTILE = 1
 
 #-------------------------------------------------------------------------------------
@@ -257,7 +263,7 @@ class State:
                     else:
                         channel_color = base_color if ch_idx == 0 else default_colors[(color_index + ch_idx - 1) % len(default_colors)]
                     self.channel_sources.append({
-                        "name": f"{config["name"]}_Ch{ch_idx+1}",
+                        "name": f"{config['name']}_Ch{ch_idx+1}",
                         "path": channel_path,
                         "folders": folders,
                         "channel_idx": ch_idx,
@@ -273,7 +279,7 @@ class State:
                     "channel_idx": 0,
                     "color": base_color
                 })
-            print(f"Added channel(s) from {config["name"]}: {n_channels} channel(s), {len(folders)} timepoints")
+            print(f"Added channel(s) from {config['name']}: {n_channels} channel(s), {len(folders)} timepoints")
         if not self.channel_sources:
             raise RuntimeError("No valid channels found in CHANNEL_CONFIG!")
         self.folders = self.channel_sources[0]["folders"]
@@ -284,7 +290,7 @@ class State:
         self.cmaps = [ch["color"] for ch in self.channel_sources]
         print(f"Total channels configured: {self.n_channels}")
         for ch in self.channel_sources:
-            print(f"  Channel: {ch["name"]} - {ch["color"]} - {len(ch["folders"])} timepoints")
+            print(f"  Channel: {ch['name']} - {ch['color']} - {len(ch['folders'])} timepoints")
         # Initialize channel on/off states: show first channel by default for safer brightness scaling.
         self.active_channels = {label: (i == 0) for i, label in enumerate(self.channel_labels)}
         # Populate base/secondary dataset and (re)build comparison/coverage (may create CSVs lazily).
@@ -309,9 +315,9 @@ class State:
                 df = pd.read_csv(config["file"])
                 self.detection_data[config["name"]] = {"data": df, "color": config["color"]}
                 self.available_detections.append(config["name"])
-                print(f"Loaded {config["name"]} detections from {config["file"]} - {len(df)} detections")
+                print(f"Loaded {config['name']} detections from {config['file']} - {len(df)} detections")
             except FileNotFoundError:
-                print(f"Warning: {config["file"]} not found - {config["name"]} detections not available")
+                print(f"Warning: {config['file']} not found - {config['name']} detections not available")
         self.active_detections = {label: False for label in self.available_detections}
         self.selected_detections = {}
         self.box_size = 20.0
@@ -388,9 +394,7 @@ class State:
         self.manual_z_override = False
         # Detect 2D mode: if max_z_planes is 1, we're in 2D mode
         self.is_2d_mode = (self.max_z_planes == 1)
-        # Plot mode toggle (False = FI plot, True = 3D tracks)
-        self.show_tracks_3d = False
-
+    
     def base_selection(self,idx):
         """Select active base / secondary dataset (radio button) and (re)build comparison / coverage.
 
@@ -1293,7 +1297,7 @@ def plot_full(ax, frame, box_size, ID_comp_df, current_id, base_name, sec_name,
     label_prefix = f"{base_name} ID" if base_name and isinstance(base_name, str) and base_name.strip() else "ID"
     info_lines = [f"z = {int(round(z_base))}", f"{label_prefix}: {int(current_id)}"]
     if state.has_comparison and sec_point is not None and x_base is not None:
-        dist = float(np.hypot(sx - x_base, sy - y_base)) if "sx" in locals() and "sy" in locals() else None
+        dist = float(np.hypot(sx - x_base, sy - y_base)) if 'sx' in locals() and 'sy' in locals() else None
         if dist is not None:
             info_lines.append(f"Distance: {dist:.1f}")
     ax.text(0.01, 0.99,
@@ -1344,20 +1348,17 @@ main_ax = fig.add_axes([0.07, 0.15, 0.4, 0.75])
 # FI plot axes (only visible in tracking mode)
 # Dedicated axes for FI time-series; toggled visible only in tracking mode.
 FI_ax = fig.add_axes([0.51, 0.18, 0.2, 0.28])
-if not state.has_tracking:
-    # Hide FI axes when tracking is unavailable.
-    FI_ax.set_visible(False)
-
-# 3D tracks axis (initially hidden) and plot mode toggle checkbox (only if tracking available)
-track3d_ax = fig.add_axes([0.51, 0.18, 0.2, 0.28], projection="3d")
+# Dedicated 3D track axes (initially hidden). Will be toggled via checkbox.
+if 'track3d_ax' not in globals():
+    track3d_ax = fig.add_axes([0.51, 0.18, 0.2, 0.28], projection="3d")
 track3d_ax.set_visible(False)
-plotmode_checkbox = None
-if state.has_tracking:
-    try:
-        ax_plotmode = fig.add_axes([0.575, 0.07, 0.07, 0.04])
-        plotmode_checkbox = CheckButtons(ax_plotmode, ["3D Tracks"], [state.show_tracks_3d])
-    except Exception as e:
-        print("Failed to create plot mode checkbox:", e)
+if not getattr(state, 'show_tracks_3d', None):
+    # Ensure flag exists (backward compatibility) and default to False
+    state.show_tracks_3d = False
+if not state.has_tracking:
+    # Hide both FI and 3D axes when tracking is unavailable.
+    FI_ax.set_visible(False)
+    track3d_ax.set_visible(False)
 
 zoom_ax = fig.add_axes([0.475, 0.50, 0.27, 0.39])
 axbox = fig.add_axes([0.22, 0.94, 0.09, 0.035])
@@ -1381,6 +1382,12 @@ else:
 ax_center_toggle = fig.add_axes([0.75, 0.937, 0.1, 0.04])
 center_checkbox = CheckButtons(ax_center_toggle, ["Center view"], [state.center_view])
 
+# Toggle FI vs 3D Track plot (only meaningful in tracking mode)
+ax_plotmode = fig.add_axes([0.51, 0.47, 0.1, 0.05])
+plotmode_checkbox = CheckButtons(ax_plotmode, ["3D Tracks"], [state.show_tracks_3d])
+if not getattr(state, 'has_tracking', False):
+    ax_plotmode.set_visible(False)
+
 try:
     if state.base_name != "":
         ax_base_select = fig.add_axes([0.01, 0.650, 0.05, len(BASE_FILES)*0.03])
@@ -1397,13 +1404,10 @@ def _on_base_file_change(label):
     """Switch base/secondary selection and refresh tracking sources when radio changes."""
     try:
         idx = _base_file_names.index(label)
+        
     except ValueError:
         print(f"Unknown base label: {label}")
         return
-    # Always update state and UI
-    text_box.label.set_text(f"{state.base} ID:")
-    state.base_selection(idx)
-    update_plot()
 try:
     base_radio.on_clicked(_on_base_file_change)
 except:
@@ -1545,17 +1549,15 @@ def update_plot(*args):
     sec_color = "red"
     ID_Comp = pd.DataFrame()
     if state.has_tracking and state.current_id is not None and not state.click_mode:
-        FI_ax.set_visible(True); FI_ax.axis("on")
         choice = state.Comp[state.Comp[state.id_col_base] == state.current_id]
         ID_Comp = choice
+        # Determine secondary color for highlighting current frame
         if state.has_comparison and state.sec:
             FI_data = FI(state.current_id, state.Comp, state.Cov, state.base)
             t_full, FI_x, t_y, ID_y, FI_y = FI_data
             if len(ID_y):
                 uniq_ids = np.unique(ID_y)
-                colors_list = [plt.cm.gist_rainbow(i / (len(uniq_ids) + 1))
-                               for i in range(len(uniq_ids) + 1)] if len(uniq_ids) else ["blue"]
-                # find color for secondary that has data exactly now
+                colors_list = [plt.cm.gist_rainbow(i / (len(uniq_ids) + 1)) for i in range(len(uniq_ids) + 1)] if len(uniq_ids) else ["blue"]
                 chosen = False
                 for seg_index, sec_id in enumerate(ID_y):
                     x_vals = np.array(t_y[seg_index], float)
@@ -1569,27 +1571,44 @@ def update_plot(*args):
             else:
                 sec_color = "gray"
         else:
-            # single tracking: red if exact row, otherwise gray
             choice_t = choice[choice["t"] == frame]
             sec_color = "red" if not choice_t.empty else "gray"
 
-        if state.show_tracks_3d:
-            # Show 3D, hide FI
+        # Decide whether to show FI plot or 3D tracks
+        if getattr(state, 'show_tracks_3d', False):
+            # Hide FI axes
+            FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
+            # Show / draw 3D axes
+            track3d_ax.set_visible(True); track3d_ax.clear()
+            # Prepare columns
+            id_col = state.id_col_base
+            x_col = get_column_name("x"); y_col = get_column_name("y"); z_col = get_column_name("z")
+            # Gather data for base track
+            base_df = state.Comp[state.Comp[id_col] == state.current_id]
+            if z_col and z_col in base_df.columns:
+                track3d_ax.plot(base_df[x_col], base_df[y_col], base_df[z_col], color='blue', label=f"{state.base_name} {state.current_id}")
+                # highlight current frame position
+                cur_row = base_df[base_df['t'] == frame]
+                if not cur_row.empty:
+                    track3d_ax.scatter(cur_row[x_col], cur_row[y_col], cur_row[z_col], color='yellow', s=40, edgecolor='k')
+            else:
+                # fallback: plot in XY plane if no z
+                track3d_ax.plot(base_df[x_col], base_df[y_col], 0, color='blue', label=f"{state.base_name} {state.current_id}")
+            # If comparison, attempt to plot matched secondary IDs for same base ID if columns exist
+            if state.has_comparison and state.sec:
+                # Heuristic: find any rows where comparison ID column equals base ID? (Assumes merged)
+                # For now, just plot all secondary tracks that share time points with base id (placeholder)
+                sec_id_col = get_column_name("ID", state.Comp)  # unified call already used
+                # Already using id_col for base; if separate col for secondary exists you can extend here.
+            track3d_ax.set_xlabel('x'); track3d_ax.set_ylabel('y'); track3d_ax.set_zlabel('z')
+            track3d_ax.set_title('3D Track')
             try:
-                FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
-            except Exception:
-                pass
-            try:
-                track3d_ax.set_visible(True); track3d_ax.clear()
-                plot_tracks_3d(track3d_ax, state.current_id, frame, sec_color)
+                track3d_ax.legend(fontsize=8)
             except Exception:
                 pass
         else:
-            # Show FI plot, hide 3D
-            try:
-                track3d_ax.clear(); track3d_ax.set_visible(False)
-            except Exception:
-                pass
+            # Show FI plot
+            track3d_ax.clear(); track3d_ax.set_visible(False)
             FI_ax.set_visible(True); FI_ax.axis("on")
             FI_ax.clear()
             if not (state.has_comparison and state.sec):
@@ -1600,15 +1619,10 @@ def update_plot(*args):
             FI_ax.set_xlim(0, state.max_frame)
             FI_ax.set_ylim(0, 1.1)
     else:
-        # No tracking active or no ID: hide both FI and 3D axes
-        try:
-            FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
-        except Exception:
-            pass
-        try:
+        # Hide both plots if no active ID / in click mode
+        FI_ax.clear(); FI_ax.axis("off"); FI_ax.set_visible(False)
+        if 'track3d_ax' in globals():
             track3d_ax.clear(); track3d_ax.set_visible(False)
-        except Exception:
-            pass
         sec_color = "red"
         ID_Comp = pd.DataFrame()
 
@@ -1710,132 +1724,6 @@ def update_plot(*args):
                          use_maxproj=state.show_zoom_maxproj)
     fig.canvas.draw_idle()
 #
-
-# === 3D Track Plot Helper ===
-def plot_tracks_3d(ax3d, base_id, current_frame, highlight_color):
-    """Plot base track (red) + comparison tracks (rainbow) mimicking FI_plot color scheme.
-
-    Args:
-        ax3d: 3D matplotlib axes
-        base_id: currently selected base ID
-        current_frame: time frame for highlighting
-        highlight_color: color for current frame marker on base track
-    """
-    if ax3d is None or base_id is None or state.Comp is None:
-        return
-    comp = state.Comp
-    id_base_col = state.id_col_base
-    id_sec_col = getattr(state, "id_col_sec", None)
-    # Resolve column variants (with parentheses) for base / sec
-    def col_for(prefix, dataset):
-        if dataset:
-            cand = f"{prefix} ({dataset})"
-            if cand in comp.columns:
-                return cand
-        return prefix if prefix in comp.columns else None
-    x_b = col_for("x", state.base); y_b = col_for("y", state.base); z_b = col_for("z", state.base)
-    x_s = col_for("x", state.sec); y_s = col_for("y", state.sec); z_s = col_for("z", state.sec)
-    t_col = "t" if "t" in comp.columns else get_column_name("t")
-    if not (id_base_col and x_b and y_b and t_col and id_base_col in comp.columns):
-        return
-    base_df = comp[comp[id_base_col] == base_id].copy()
-    if base_df.empty:
-        return
-    if t_col in base_df.columns:
-        base_df.sort_values(t_col, inplace=True)
-    tb = base_df[t_col].to_numpy()
-    xb = base_df[x_b].to_numpy(); yb = base_df[y_b].to_numpy(); zb = base_df[z_b].to_numpy() if z_b and z_b in base_df.columns else np.zeros_like(xb)
-    gaps = np.where(np.diff(tb) > 1)[0] + 1
-    segs = np.split(np.arange(tb.size), gaps) if gaps.size else [np.arange(tb.size)]
-    for si, seg in enumerate(segs):
-        if seg.size == 1:
-            i0 = seg[0]
-            ax3d.plot([xb[i0]-0.01, xb[i0]+0.01], [yb[i0]-0.01, yb[i0]+0.01], [zb[i0], zb[i0]], color="red", linewidth=2,
-                      label=f"{state.base_name} ID: {int(base_id)}" if si==0 else None)
-        else:
-            ax3d.plot(xb[seg], yb[seg], zb[seg], color="red", linewidth=2,
-                      label=f"{state.base_name} ID: {int(base_id)}" if si==0 else None)
-    # Highlight current frame points: base (always) + any secondary IDs with data at this frame
-    if current_frame is not None:
-        if current_frame in base_df[t_col].values:
-            r_now = base_df[base_df[t_col] == current_frame].iloc[0]
-            ax3d.scatter(r_now[x_b], r_now[y_b], r_now[z_b] if z_b and z_b in base_df.columns else 0,
-                         color="red", s=30, zorder=60, label=None)
-        # Highlight secondary current points (same color mapping as track segments)
-        if state.has_comparison and state.sec and id_sec_col and id_sec_col in comp.columns and x_s and y_s:
-            sec_rows = comp[(comp[id_base_col] == base_id) & (comp[t_col] == current_frame)]
-            if not sec_rows.empty:
-                sec_ids_now = sec_rows[id_sec_col].dropna().unique()
-                all_sec_ids = comp.loc[comp[id_base_col] == base_id, id_sec_col].dropna().unique()
-                # Reproduce color assignment used above
-                colors_map = {}
-                if len(all_sec_ids):
-                    palette = [plt.cm.gist_rainbow((i+1)/(len(all_sec_ids)+1)) for i in range(len(all_sec_ids))]
-                    for colr, sid in zip(palette, all_sec_ids):
-                        colors_map[sid] = colr
-                for sid in sec_ids_now:
-                    row_s_now = sec_rows[sec_rows[id_sec_col] == sid].iloc[0]
-                    xs_val = row_s_now[x_s]; ys_val = row_s_now[y_s]
-                    zs_val = row_s_now[z_s] if z_s and z_s in sec_rows.columns else 0
-                    c = colors_map.get(sid, "blue")
-                    ax3d.scatter(xs_val, ys_val, zs_val, color=c, s=30, zorder=55, label=None)
-
-        
-    # Secondary tracks
-    if state.has_comparison and state.sec and id_sec_col and id_sec_col in comp.columns and x_s and y_s:
-        sec_ids = comp.loc[comp[id_base_col] == base_id, id_sec_col].dropna().unique()
-        if len(sec_ids):
-            colors = [plt.cm.gist_rainbow((i+1)/(len(sec_ids)+1)) for i in range(len(sec_ids))]
-            for color, sid in zip(colors, sec_ids):
-                sdf = comp[comp[id_sec_col] == sid].copy()
-                if sdf.empty:
-                    continue
-                if t_col in sdf.columns:
-                    sdf.sort_values(t_col, inplace=True)
-                ts = sdf[t_col].to_numpy()
-                xs = sdf[x_s].to_numpy(); ys = sdf[y_s].to_numpy(); zs = sdf[z_s].to_numpy() if z_s and z_s in sdf.columns else np.zeros_like(xs)
-                gaps2 = np.where(np.diff(ts) > 1)[0] + 1
-                segs2 = np.split(np.arange(ts.size), gaps2) if gaps2.size else [np.arange(ts.size)]
-                for si, seg in enumerate(segs2):
-                    if seg.size == 1:
-                        i0 = seg[0]
-                        ax3d.plot([xs[i0]-0.01, xs[i0]+0.01], [ys[i0]-0.01, ys[i0]+0.01], [zs[i0], zs[i0]], color=color, linewidth=1.5,
-                                  label=f"{state.sec_name} ID: {int(sid)}" if si==0 else None)
-                    else:
-                        ax3d.plot(xs[seg], ys[seg], zs[seg], color=color, linewidth=1.5,
-                                  label=f"{state.sec_name} ID: {int(sid)}" if si==0 else None)
-    ax3d.set_xlabel("x"); ax3d.set_ylabel("y"); ax3d.set_zlabel("z")
-    ax3d.set_title("3D Tracks")
-    try:
-        h, l = ax3d.get_legend_handles_labels()
-        uniq = {}
-        for hh,ll in zip(h,l):
-            if ll and ll not in uniq:
-                uniq[ll] = hh
-        if uniq:
-            ax3d.legend(uniq.values(), uniq.keys(), fontsize=6, loc="upper right", bbox_to_anchor=(1.3, 1))
-    except Exception:
-        pass
-
-def on_plotmode_toggle(label):
-    if not state.has_tracking:
-        return
-    state.show_tracks_3d = not state.show_tracks_3d
-    update_plot()
-    # Swap label text so the box always shows the alternative view
-    try:
-        if plotmode_checkbox is not None and plotmode_checkbox.labels:
-            new_text = "FI Plot" if state.show_tracks_3d else "3D Tracks"
-            plotmode_checkbox.labels[0].set_text(new_text)
-            fig.canvas.draw_idle()
-    except Exception:
-        pass
-
-try:
-    if plotmode_checkbox is not None:
-        plotmode_checkbox.on_clicked(on_plotmode_toggle)
-except Exception as e:
-    print("Plot mode checkbox binding failed:", e)
 
 def update_z_plane():
     """Adjust z plane toward natural tracked z for current ID (when not in max projection)."""
@@ -1961,6 +1849,12 @@ def on_center_toggle(label):
     update_plot()
 
 center_checkbox.on_clicked(on_center_toggle)
+
+def on_plotmode_toggle(label):
+    state.show_tracks_3d = not state.show_tracks_3d
+    update_plot()
+
+plotmode_checkbox.on_clicked(on_plotmode_toggle)
 
 def on_id_submit(text):
     if not state.has_tracking or state.click_mode:

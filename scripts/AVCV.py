@@ -1395,9 +1395,8 @@ def _on_base_file_change(label):
         print(f"Unknown base label: {label}")
         return
     # Always update state and UI
-    text_box.label.set_text(f"{state.base} ID:")
     state.base_selection(idx)
-    update_plot()
+    text_box.label.set_text(f"{state.base} ID:")
 try:
     base_radio.on_clicked(_on_base_file_change)
 except:
